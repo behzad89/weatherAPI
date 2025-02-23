@@ -1,9 +1,8 @@
 from fastapi import FastAPI, HTTPException, Path,Depends
-from utils import cities_from_geojson,read_from_DB, get_db
+from utils import cities_from_geojson,read_from_DB, get_db,geojson
 from sqlalchemy.orm import Session
 
-cities_filepath = './data/cities.geojson'
-cities = cities_from_geojson(cities_filepath)
+cities = cities_from_geojson(geojson)
 
 app = FastAPI()
 
