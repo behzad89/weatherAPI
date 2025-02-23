@@ -17,9 +17,7 @@ from sqlalchemy import (Table,
 COLs= ['latitude', 'longitude', 'city_name', 'time', 
        'temperature_2m','relative_humidity_2m', 'wind_speed_10m']
 
-def cities_from_geojson(filepath):
-    with open(filepath, 'r') as f:
-        json_obj = json.load(f)
+def cities_from_geojson(json_obj):
         return json_obj['features']
 
 # @ray.remote
