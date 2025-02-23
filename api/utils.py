@@ -3,19 +3,23 @@ import requests
 import pandas as pd
 # import ray
 import os
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import (Table, 
                         Column, 
                         MetaData, 
                         create_engine, 
                         Float, 
                         TIMESTAMP,
-                        String)
+                        String,
+                        text)
                         
 
 COLs= ['latitude', 'longitude', 'city_name', 'time', 
        'temperature_2m','relative_humidity_2m', 'wind_speed_10m']
 
-def cities_from_geojson(json_obj):
+def cities_from_geojson(filepath):
+    with open(filepath, 'r') as f:
+        json_obj = json.load(f)
         return json_obj['features']
 
 # @ray.remote
@@ -54,7 +58,7 @@ def convert_to_daily_df(json_data,city_name,cols=COLs):
     df = df[cols]
     return df
 
-def db_config():
+def get_SessionLocal():
     # Read from environment variables, or use default values
     CCDB_USER = os.getenv('CCDB_USER', 'postgres')
     CCDB_PASS = os.getenv('CCDB_PASS', 'mysecretpassword')
@@ -63,9 +67,26 @@ def db_config():
     DB = os.getenv('DB', 'postgres')
 
     # Create the database engine
-    engine = create_engine(f'postgresql://{CCDB_USER}:{CCDB_PASS}@{HOST}:{PORT}/{DB}')
+    engine = create_engine(
+    f'postgresql://{CCDB_USER}:{CCDB_PASS}@{HOST}:{PORT}/{DB}',
+    pool_size=10,  # Max number of connections to keep in the pool
+    max_overflow=20,  # Allow up to 20 extra connections
+    pool_timeout=30,  # Wait up to 30 seconds for a connection
+    pool_recycle=1800  # Recycle connections every 30 minutes (to avoid stale connections)
+    )
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     
-    return engine
+    return SessionLocal()
+
+def get_db():
+    """Dependency to get database session"""
+    db = get_SessionLocal()
+    try:
+        yield db  # Give the session to the request
+    finally:
+        db.close()  # Close session after request
+
+
 
 def create_table(year:int,
                  conn:str):
@@ -86,23 +107,21 @@ def create_table(year:int,
 # @ray.remote
 def ingest_to_db(df:pd.DataFrame,
                  schema:str,
-                 year=str):
+                 year:str,
+                 db: Session):
     
 
-    engine = db_config()
-    create_table(year,engine)
-    return df.to_sql(name=f'climate_{year}',schema=schema,con= engine, if_exists='append', index=False)
+    create_table(year,db.bind)
+    return df.to_sql(name=f'climate_{year}',schema=schema,con= db.bind, if_exists='append', index=False)
 
 
 def read_from_DB(year:str,
-                 city:str):
+                 city:str,
+                 db:Session):
 
-    engine = db_config()
 
     # Read table into DataFrame
-    sql = f"select * from weather.climate_{year} where climate_{year}.city_name  = '{city.capitalize()}'"
-    df = pd.read_sql(sql=sql, con=engine)
+    sql = text(f"SELECT * FROM weather.climate_{year} WHERE city_name = :city")
+    df = pd.read_sql(sql=sql, con=db.bind,params={"year": year, "city": city.capitalize()})
+    df.drop('city_name',axis=1,inplace=True)
     return df.to_dict()
-
-
-geojson = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"city_name":"London"},"geometry":{"coordinates":[-0.12163434564180875,51.5016303931763],"type":"Point"},"id":0},{"type":"Feature","properties":{"city_name":"Cardiff"},"geometry":{"coordinates":[-3.170676094902177,51.48466197944012],"type":"Point"},"id":1},{"type":"Feature","properties":{"city_name":"Bristol"},"geometry":{"coordinates":[-2.5841158826883373,51.45489286558609],"type":"Point"},"id":2},{"type":"Feature","properties":{"city_name":"Birmingham"},"geometry":{"coordinates":[-1.874632115742287,52.47611937450699],"type":"Point"},"id":3},{"type":"Feature","properties":{"city_name":"Nottingham"},"geometry":{"coordinates":[-1.143188775695819,52.95230260148071],"type":"Point"},"id":4},{"type":"Feature","properties":{"city_name":"Sheffield"},"geometry":{"coordinates":[-1.4523691070393454,53.38615494433887],"type":"Point"},"id":5},{"type":"Feature","properties":{"city_name":"Wakefield"},"geometry":{"coordinates":[-1.4875707699151235,53.68282203401111],"type":"Point"},"id":6},{"type":"Feature","properties":{"city_name":"Manchester"},"geometry":{"coordinates":[-2.2535596807031197,53.46992655854564],"type":"Point"},"id":7},{"type":"Feature","properties":{"city_name":"Warrington"},"geometry":{"coordinates":[-2.584021302736801,53.38207241607904],"type":"Point"},"id":8},{"type":"Feature","properties":{"city_name":"Chester"},"geometry":{"coordinates":[-2.8722637087616363,53.180396651669014],"type":"Point"},"id":9}]}

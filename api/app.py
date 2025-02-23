@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException, Path
-from utils import cities_from_geojson,read_from_DB,geojson
+from fastapi import FastAPI, HTTPException, Path,Depends
+from utils import cities_from_geojson,read_from_DB, get_db
+from sqlalchemy.orm import Session
 
-cities = cities_from_geojson(geojson)
+cities_filepath = './data/cities.geojson'
+cities = cities_from_geojson(cities_filepath)
 
 app = FastAPI()
 
@@ -24,7 +26,8 @@ def get_cities():
 
 @app.get("/city/{city_name}/{year}")
 def get_city(city_name: str = Path(..., title="City Name", description="Name of the city"),
-    year: int = Path(..., gt=2019, lt=2025, title="Year", description="Year for weather details")):
+    year: int = Path(..., gt=2019, lt=2025, title="Year", description="Year for weather details"),
+    db=Depends(get_db)):
     
     # Find the first matching city
     city_coords = next((c for c in cities if c['properties']["city_name"].lower() == city_name.lower()), None)
@@ -37,5 +40,5 @@ def get_city(city_name: str = Path(..., title="City Name", description="Name of 
         return {"city": city_name, 
                 "info": f"Weather details retrieved for {year}",
                 "city_coords":city_coords,
-                "daily_data":read_from_DB(year=year,city=city_name)
+                "daily_data":read_from_DB(year=year,city=city_name,db=db)
                 }
