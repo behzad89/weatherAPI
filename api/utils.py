@@ -102,7 +102,6 @@ def read_from_DB(year:str,
     # Read table into DataFrame
     sql = f"select * from weather.climate_{year} where climate_{year}.city_name  = '{city.capitalize()}'"
     df = pd.read_sql(sql=sql, con=engine)
-    df.drop('city_name',axis=1,inplace=True)
     return df.to_dict()
 
 
