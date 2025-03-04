@@ -35,4 +35,4 @@ This diagram illustrates the architecture of a weather data API system, detailin
 6. **API Interaction:** Users access the weather data via a FastAPI-based service hosted on Vercel.  
 
 This setup ensures efficient weather data retrieval, transformation, and API-based access for users.
-![Weather API Architecture](WeatherAPI.png)
+![Weather API Architecture](WeatherAPI_white.png)
